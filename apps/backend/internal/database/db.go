@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"gorm.io/driver/postgres"
@@ -14,8 +15,13 @@ import (
 var DB *gorm.DB
 
 func Connect() (*gorm.DB, error) {
+	host := os.Getenv("DB_HOST")
+	if host == "" {
+		host = "localhost"
+	}
+
 	// Database connection string matching our docker-compose.yml:
-	dsn := "host=localhost user=postgres password=password123 dbname=uptime_db port=5432 sslmode=disable TimeZone=UTC"
+	dsn := fmt.Sprintf("host=%s user=postgres password=password123 dbname=uptime_db port=5432 sslmode=disable TimeZone=UTC", host)
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {

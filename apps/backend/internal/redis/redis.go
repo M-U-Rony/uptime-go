@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -27,10 +28,15 @@ func Connect() (*redis.Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	addr := os.Getenv("REDIS_ADDR")
+	if addr == "" {
+		addr = "localhost:6379"
+	}
+
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379", // Matches docker-compose port
-		Password: "",               // No password set in docker-compose
-		DB:       0,                // Default DB
+		Addr:     addr,
+		Password: "", // No password set in docker-compose
+		DB:       0,  // Default DB
 	})
 
 	// Ping Redis to verify connection
