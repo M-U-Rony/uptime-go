@@ -22,11 +22,11 @@ This roadmap breaks down rebuilding the full uptime monitoring system using **Go
 
 > **Goal:** Connect your Next.js dashboard inside `apps/frontend` to the Go backend.
 
-- [ ] **6.1 Setup API Client**
-  - Create centralized fetch wrapper with JWT token handling in Next.js.
-- [ ] **6.2 Auth Pages**
+- [x] **6.1 Setup API Client**
+  - Direct fetch client with HttpOnly cookie credentials.
+- [x] **6.2 Auth Pages**
   - Sign in and Sign up forms.
-- [ ] **6.3 Dashboard & Realtime Status**
+- [x] **6.3 Dashboard & Realtime Status**
   - Add website modal (URL input).
   - Status cards (Up/Down indicators, response time badges).
   - Latency sparkline / chart per website.
