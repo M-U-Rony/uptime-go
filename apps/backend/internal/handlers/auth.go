@@ -133,10 +133,39 @@ func SigninHandler(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 5. Send Token to client
+    // 5. Set HttpOnly Cookie (Valid for 7 days)
+    http.SetCookie(w, &http.Cookie{
+        Name:     "token",
+        Value:    tokenString,
+        Path:     "/",
+        Expires:  time.Now().Add(7 * 24 * time.Hour),
+        HttpOnly: true,                 // Immune to XSS attacks (JavaScript cannot read)
+        Secure:   false,                // Set to true in production (HTTPS)
+        SameSite: http.SameSiteLaxMode, // CSRF protection
+    })
+
+    // 6. Send Response to client
     w.WriteHeader(http.StatusOK)
     json.NewEncoder(w).Encode(SigninResponse{
         Message: "Signed in successfully",
         Token:   tokenString,
     })
+}
+
+// SignoutHandler clears the HttpOnly auth cookie
+func SignoutHandler(w http.ResponseWriter, r *http.Request) {
+    w.Header().Set("Content-Type", "application/json")
+
+    http.SetCookie(w, &http.Cookie{
+        Name:     "token",
+        Value:    "",
+        Path:     "/",
+        Expires:  time.Unix(0, 0), // Expire in the past
+        MaxAge:   -1,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
+
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{"message": "Signed out successfully"})
 }

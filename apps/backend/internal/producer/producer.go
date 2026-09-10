@@ -39,15 +39,15 @@ func produceJobs() {
 		return
 	}
 
-	// 2. Push each website ID onto the Redis queue
-	enqueuedCount := 0
 	for _, website := range websites {
-		if err := redis.PushPingJob(ctx, website.ID); err != nil {
+		job := redis.PingJob{
+			ID:  website.ID,
+			URL: website.URL,
+		}
+		if err := redis.PushPingJob(ctx, job); err != nil {
 			log.Printf("❌ Producer: Failed to push job for website %s: %v", website.ID, err)
 			continue
 		}
-		enqueuedCount++
 	}
 
-	log.Printf("📥 Producer: Successfully enqueued %d website ping jobs to Redis", enqueuedCount)
 }

@@ -19,22 +19,23 @@ func RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// 1. Extract header
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"error": "Authorization header required"}`))
-			return
+		// 1. Extract token from HttpOnly Cookie or Authorization header
+		var tokenString string
+
+		if cookie, err := r.Cookie("token"); err == nil && cookie.Value != "" {
+			tokenString = cookie.Value
+		} else {
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+			}
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		if tokenString == "" {
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`{"error": "Authorization header must be 'Bearer <token>'"}`))
+			w.Write([]byte(`{"error": "Unauthorized: Missing authentication token or cookie"}`))
 			return
 		}
-
-		tokenString := parts[1]
 
 		// 2. Parse & validate token
 		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {

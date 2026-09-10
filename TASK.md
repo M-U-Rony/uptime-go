@@ -17,21 +17,9 @@ This roadmap breaks down rebuilding the full uptime monitoring system using **Go
          [ Redis ] ◄─── consumes jobs ─── [ Go Worker (Goroutines) ]
 ```
 
-## Phase 5: Redis & The Background Worker (Go's Superpower)
-> **Goal:** Build the producer and high-concurrency worker pipeline. *(Why Go shines: Goroutines handle thousands of concurrent pings with minimal RAM).*
-
-- [ ] **5.2 The Producer Service (Ticker / Cron)**
-  - Learn: `time.NewTicker` in Go.
-  - Periodically fetch all active websites from DB and push ping jobs to Redis.
-- [ ] **5.3 The Worker Pool (Goroutines & HTTP Client)**
-  - Learn: Goroutines, `sync.WaitGroup`, and worker pool pattern.
-  - Worker pops jobs from Redis.
-  - Uses `http.Client` with custom timeouts to ping URLs and measure latency (`time.Since`).
-  - Writes `WebsiteTick` results directly back to PostgreSQL.
-
----
 
 ## Phase 6: Next.js Frontend Integration
+
 > **Goal:** Connect your Next.js dashboard inside `apps/frontend` to the Go backend.
 
 - [ ] **6.1 Setup API Client**
@@ -46,6 +34,7 @@ This roadmap breaks down rebuilding the full uptime monitoring system using **Go
 ---
 
 ## Phase 7: Production Polish & Interview Talking Points
+
 > **Goal:** Topics and optimizations interviewers look for in Go candidates.
 
 - [ ] **7.1 Structured Logging**

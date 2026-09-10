@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -11,6 +12,12 @@ import (
 
 // QueueName is the Redis List key where ping jobs are stored
 const QueueName = "website_ping_queue"
+
+// PingJob carries the necessary payload for a worker to ping without DB lookup
+type PingJob struct {
+	ID  string `json:"id"`
+	URL string `json:"url"`
+}
 
 // Global Redis client
 var Client *redis.Client
@@ -36,19 +43,28 @@ func Connect() (*redis.Client, error) {
 	return rdb, nil
 }
 
-// PushPingJob pushes a website ID to the end of the queue (Producer)
-func PushPingJob(ctx context.Context, websiteID string) error {
-	return Client.LPush(ctx, QueueName, websiteID).Err()
+// PushPingJob pushes a serialized PingJob to the end of the queue (Producer)
+func PushPingJob(ctx context.Context, job PingJob) error {
+	data, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ping job: %w", err)
+	}
+	return Client.LPush(ctx, QueueName, data).Err()
 }
 
-// PopPingJob pops a website ID from the queue (Worker)
+// PopPingJob pops and deserializes a PingJob from the queue (Worker)
 // BRPop blocks and waits if the queue is currently empty
-func PopPingJob(ctx context.Context) (string, error) {
+func PopPingJob(ctx context.Context) (*PingJob, error) {
 	// 0 means wait indefinitely until a job arrives
 	result, err := Client.BRPop(ctx, 0*time.Second, QueueName).Result()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	// result[0] is the queue name, result[1] is the popped value (websiteID)
-	return result[1], nil
+
+	var job PingJob
+	if err := json.Unmarshal([]byte(result[1]), &job); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal ping job: %w", err)
+	}
+
+	return &job, nil
 }
