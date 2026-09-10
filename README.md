@@ -1,159 +1,199 @@
-# Turborepo starter
+# ⚡ UptimeGo
 
-This Turborepo starter is maintained by the Turborepo core team.
+**High-Concurrency Distributed Website & API Uptime Monitor**  
+*Engineered with Go (Golang), Next.js 16, Redis 7, PostgreSQL 16, and Docker.*
 
-## Using this example
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat&logo=go&logoColor=white)](https://golang.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat&logo=next.js&logoColor=white)](https://nextjs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat&logo=redis&logoColor=white)](https://redis.io)
+[![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com)
+[![Turborepo](https://img.shields.io/badge/Turborepo-Monorepo-EF4444?style=flat&logo=turborepo&logoColor=white)](https://turbo.build)
 
-Run the following command:
+---
 
-```sh
-npx create-turbo@latest
+## 🎯 Target & Overview
+
+**UptimeGo** is a fullstack, distributed uptime and latency monitoring platform. It solves the performance limitations of traditional single-threaded monitoring probes by offloading health checks to a **concurrent Go Goroutine worker pool** decoupled through a **Redis queue**.
+
+Capable of executing thousands of concurrent HTTP health checks with sub-second precision and minimal memory footprint (~2KB stack per worker), it persists granular latency ticks in PostgreSQL and visualizes them on a modern, real-time Next.js dashboard.
+
+---
+
+## 🗺️ System Architecture
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                 Next.js Frontend (Port 3000)                │
+│         Realtime Status, Sparklines & Metric Cards          │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTP / CORS (HttpOnly Cookie JWT)
+                               ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 Go API Server (Port 8080)                   │
+│         REST Endpoints, Auth Middleware, Context Injection  │
+└──────────────┬───────────────────────────────┬──────────────┘
+               │ Enqueues PingJob{ID, URL}     │ Queries / Inserts
+               ▼                               ▼
+     ┌──────────────────┐           ┌──────────────────────┐
+     │  Redis 7 Queue   │           │    PostgreSQL 16     │
+     │  (LPUSH / BRPOP) │           │ Users, Sites, Ticks  │
+     └─────────┬────────┘           └──────────▲───────────┘
+               │ Atomic Pop (BRPop)            │ Writes WebsiteTick
+               ▼                               │ (latency ms, status)
+┌──────────────────────────────────────────────┴──────────────┐
+│             Go Worker Pool (Goroutines)                     │
+│  Worker 1 (Goroutine)  Worker 2 (Goroutine)  Worker 3 ...   │
+│  ├── Pings Target URL with 10s Timeout http.Client          │
+│  └── Measures Latency (time.Since) & Records History Tick   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
+## ✨ Core Engineering Highlights
 
-### Apps and Packages
+- **Goroutine Worker Pool:** Replaced thread-heavy workers with lightweight Go goroutines. A pool of concurrent workers continuously consumes jobs from Redis without busy-waiting (`BRPOP`).
+- **Zero-Read Queue Pipeline:** The scheduled Go producer (`time.Ticker`) serializes self-contained job payloads (`PingJob{ID, URL}`) directly into Redis, **eliminating redundant database read queries** during probe cycles.
+- **XSS-Immune Authentication:** Implemented custom Go HTTP middleware extracting JWTs from **`HttpOnly` cookies**, with `Authorization: Bearer` fallback for CLI/Postman testing, and strict CORS credential handling.
+- **Relational Time-Series Tick Storage:** Automatically migrates schemas via GORM, recording millisecond latency, response codes, and foreign key cascade deletion.
+- **Modern Dashboard UI:** Built with Next.js 16 and Tailwind CSS, featuring active monitors, response time badges, interactive latency sparklines, and auto-refresh polling.
+- **Multi-Stage Docker Containers:** Compiles Go into a statically linked, minimal production container (**<20MB** image size) running as an unprivileged user.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+---
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+## 📁 Repository Structure
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo build
+```text
+uptime-go/
+├── apps/
+│   ├── backend/                  # Go Backend Service
+│   │   ├── cmd/server/main.go    # HTTP Server & Worker Pool Entrypoint
+│   │   ├── internal/
+│   │   │   ├── config/           # JWT & Server Configurations
+│   │   │   ├── database/         # PostgreSQL GORM Connection & Auto-migration
+│   │   │   ├── handlers/         # Auth & Website CRUD Controllers
+│   │   │   ├── middleware/       # Auth (Cookie/Bearer) & CORS Middleware
+│   │   │   ├── models/           # User, Website, Region, WebsiteTick
+│   │   │   ├── producer/         # Ticker-based Job Dispatcher (time.NewTicker)
+│   │   │   ├── redis/            # Redis Connection & LPUSH / BRPOP Client
+│   │   │   └── worker/           # Concurrency Worker Pool & HTTP Pinger
+│   │   └── Dockerfile            # Multi-stage Go Alpine Build (< 20MB)
+│   │
+│   └── frontend/                 # Next.js 16 Dashboard
+│       ├── app/
+│       │   ├── dashboard/        # Live Monitoring Dashboard & Sparklines
+│       │   ├── signin/           # User Login (HttpOnly Cookie Session)
+│       │   ├── signup/           # User Registration
+│       │   └── page.tsx          # Landing / Entry Router
+│       └── Dockerfile            # Multi-stage Next.js Standalone Build
+│
+├── docker-compose.yml            # Fullstack Container Orchestration
+├── turbo.json                    # Turborepo Monorepo Pipeline
+└── package.json                  # Workspace Definitions
 ```
 
-Without global `turbo`, use your package manager:
+---
 
-```sh
-cd my-turborepo
-npx turbo build
-bun exec turbo build
-bun exec turbo build
+## 🚀 Quick Start (Local Development)
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Go 1.22+](https://golang.org/dl/)
+- [Node.js 20+](https://nodejs.org/) or [Bun](https://bun.sh/)
+
+---
+
+### Step 1: Start Infrastructure (PostgreSQL & Redis)
+From the repository root, start database and caching containers in the background:
+
+```bash
+docker compose up -d postgres redis
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Verify services are healthy:
+* **PostgreSQL:** Running on `localhost:5432` (`user: postgres`, `password: password123`, `db: uptime_db`)
+* **Redis:** Running on `localhost:6379`
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+---
 
-```sh
-turbo build --filter=docs
+### Step 2: Run Backend & Frontend Concurrently
+
+Using **Bun**:
+```bash
+bun dev
 ```
 
-Without global `turbo`:
-
-```sh
-npx turbo build --filter=docs
-bun exec turbo build --filter=docs
-bun exec turbo build --filter=docs
+Or using **npm**:
+```bash
+npm run dev
 ```
 
-### Develop
+Turborepo starts both services simultaneously:
+- **Frontend Dashboard:** [http://localhost:3000](http://localhost:3000)
+- **Go API Server:** [http://localhost:8080](http://localhost:8080)
 
-To develop all apps and packages, run the following command:
+---
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## 🐳 Full-Stack Docker Deployment
 
-```sh
-cd my-turborepo
-turbo dev
+You can run the **entire stack** (PostgreSQL, Redis, Go Backend, and Next.js Frontend) fully containerized with one command:
+
+```bash
+docker compose up --build -d
 ```
 
-Without global `turbo`, use your package manager:
+### Running Services
 
-```sh
-cd my-turborepo
-npx turbo dev
-bun exec turbo dev
-bun exec turbo dev
+| Service | Container Name | Internal Port | Host Port | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **Frontend** | `uptime_frontend` | `3000` | `3000` | Next.js Dashboard UI |
+| **Backend** | `uptime_backend` | `8080` | `8080` | Go REST API & Ping Worker Pool |
+| **PostgreSQL** | `uptime_postgres` | `5432` | `5432` | Relational Storage (GORM) |
+| **Redis** | `uptime_redis` | `6379` | `6379` | In-Memory Ping Queue |
+
+To stop all services:
+```bash
+docker compose down
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo dev --filter=web
+To view real-time logs:
+```bash
+docker compose logs -f backend
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo dev --filter=web
-bun exec turbo dev --filter=web
-bun exec turbo dev --filter=web
-```
+## 🔐 Environment Variables
 
-### Remote Caching
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `DB_HOST` | `localhost` (`postgres` in Docker) | Hostname for PostgreSQL instance |
+| `REDIS_ADDR` | `localhost:6379` (`redis:6379` in Docker) | Address for Redis connection |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | Backend API base URL consumed by Next.js |
+| `JWT_SECRET` | `supersecretkey123` | Secret key used to sign and verify JWTs |
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+---
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+## 📡 API Reference
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+### Authentication
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/auth/signup` | Register new user account | No |
+| `POST` | `/api/auth/signin` | Authenticate & set `HttpOnly` cookie | No |
+| `POST` | `/api/auth/signout` | Clear `HttpOnly` auth cookie | Yes |
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+### Website Monitoring (CRUD)
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/websites` | Add new URL to monitor | Yes |
+| `GET` | `/api/websites` | List all monitors for logged-in user | Yes |
+| `GET` | `/api/websites/{id}` | Get monitor details & latency tick history | Yes |
+| `DELETE` | `/api/websites/{id}` | Remove monitor & cascade delete ticks | Yes |
 
-```sh
-cd my-turborepo
-turbo login
-```
+---
 
-Without global `turbo`, use your package manager:
+## 📜 License
 
-```sh
-cd my-turborepo
-npx turbo login
-bun exec turbo login
-bun exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-bun exec turbo link
-bun exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+This project is licensed under the MIT License.
